@@ -25,8 +25,27 @@ namespace HardwareScanner.Models
         public List<GpuInfo> Gpus { get; set; } = new();
         public BatteryInfo Battery { get; set; } = new();
         public MotherboardInfo Motherboard { get; set; } = new();
+        public List<TemperatureSensorInfo> TemperatureSensors { get; set; } = new();
+        public string TemperatureSensorSummaryText => TemperatureSensors.Count > 0
+            ? $"{TemperatureSensors.Count} sıcaklık sensörü bulundu"
+            : "Sıcaklık sensörü okunamadı";
         public List<NetworkInfo> Networks { get; set; } = new();
         public NetworkHealthInfo NetworkHealth { get; set; } = new();
+        public NetworkInfo PrimaryNetwork => Networks.Count > 0
+            ? Networks[0]
+            : new NetworkInfo
+            {
+                Name = "Ağ bağdaştırıcısı bulunamadı",
+                StatusText = "Okunamadı",
+                Health = HealthStatus.Unknown,
+                HealthText = "Okunamadı"
+            };
+        public List<NetworkInfo> AdditionalNetworks => Networks.Count > 1
+            ? Networks.GetRange(1, Networks.Count - 1)
+            : new List<NetworkInfo>();
+        public string NetworkAdapterSummaryText => Networks.Count > 0
+            ? $"{Networks.Count} bağdaştırıcı bulundu"
+            : "Ağ bağdaştırıcısı okunamadı";
     }
 
     /// <summary>Ortak yardımcılar (byte biçimleme, sıcaklık metni).</summary>
@@ -127,6 +146,10 @@ namespace HardwareScanner.Models
         public int CycleCount { get; set; } = -1;
         public HealthStatus Status { get; set; } = HealthStatus.Unknown;
         public string WearText => WearLevelPercent >= 0 ? $"Aşınma: %{WearLevelPercent}" : "Aşınma: Bilinmiyor";
+        public string SummaryText => IsPresent ? WearText : "Pil bulunamadı";
+        public string DesignCapacityText => IsPresent && DesignCapacity > 0 ? $"{DesignCapacity} mWh" : "Bilinmiyor";
+        public string FullChargeCapacityText => IsPresent && FullChargeCapacity > 0 ? $"{FullChargeCapacity} mWh" : "Bilinmiyor";
+        public string CycleCountText => CycleCount >= 0 ? CycleCount.ToString() : "Bilinmiyor";
     }
 
     public class MotherboardInfo
@@ -137,6 +160,14 @@ namespace HardwareScanner.Models
         public string TemperatureText => Fmt.Temp(Temperature);
         public string HealthText { get; set; } = "Sağlam";
         public HealthStatus Health { get; set; } = HealthStatus.Good;
+    }
+
+    public class TemperatureSensorInfo
+    {
+        public string Component { get; set; } = "Bilinmiyor";
+        public string Name { get; set; } = "Bilinmiyor";
+        public int Temperature { get; set; } = -1;
+        public string TemperatureText => Fmt.Temp(Temperature);
     }
 
     public class NetworkInfo
@@ -169,6 +200,8 @@ namespace HardwareScanner.Models
     {
         public bool HasConnection { get; set; }
         public bool InternetReachable { get; set; }
+        public string HasConnectionText => HasConnection ? "Var" : "Yok";
+        public string InternetReachableText => InternetReachable ? "Erişilebilir" : "Erişilemiyor";
         public string PingTarget { get; set; } = "8.8.8.8";
         public long PingMs { get; set; } = -1;
         public int PacketLossPercent { get; set; } = -1;

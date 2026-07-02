@@ -101,6 +101,7 @@
                         IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBool}}"/>
                 <Button Content="📋  Panoya Kopyala" Style="{StaticResource SidebarButtonStyle}" Click="BtnCopyReport_Click"
                         IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBool}}"/>
+                <TextBlock Text="{Binding AutoReportStatus}" FontSize="12" Foreground="#9CA3AF" Margin="20,16,20,0" TextWrapping="Wrap"/>
                 
                 <TextBlock Text="Sistem Analizi Devam Ediyor..." FontSize="12" Foreground="#9CA3AF" Margin="20,400,20,0" Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}" TextWrapping="Wrap"/>
             </StackPanel>
@@ -229,6 +230,7 @@
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
                                     <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
                                 </Grid.RowDefinitions>
 
                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Model:" Style="{StaticResource InfoRowKeyStyle}" />
@@ -242,6 +244,9 @@
 
                                 <TextBlock Grid.Row="3" Grid.Column="0" Text="Hız:" Style="{StaticResource InfoRowKeyStyle}" />
                                 <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SysInfo.Cpu.Speed}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="Sıcaklık:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SysInfo.Cpu.Temperature, Converter={StaticResource UnknownValue}, ConverterParameter=' °C'}" Style="{StaticResource InfoRowValueStyle}" />
                             </Grid>
                         </StackPanel>
                     </Border>
@@ -307,8 +312,11 @@
 
                                 <TextBlock Grid.Row="1" Grid.Column="0" Text="Ana. Model:" Style="{StaticResource InfoRowKeyStyle}" />
                                 <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SysInfo.Motherboard.Model}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Sıcaklık:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SysInfo.Motherboard.Temperature, Converter={StaticResource UnknownValue}, ConverterParameter=' °C'}" Style="{StaticResource InfoRowValueStyle}" />
                                 
-                                <ItemsControl Grid.Row="2" Grid.ColumnSpan="2" ItemsSource="{Binding SysInfo.Gpus}" Margin="0,10,0,0">
+                                <ItemsControl Grid.Row="3" Grid.ColumnSpan="2" ItemsSource="{Binding SysInfo.Gpus}" Margin="0,10,0,0">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
                                             <StackPanel Margin="0,0,0,10">
@@ -320,6 +328,8 @@
                                                 <TextBlock Text="GPU Modeli:" Style="{StaticResource InfoRowKeyStyle}" />
                                                 <TextBlock Text="{Binding Model}" Style="{StaticResource InfoRowValueStyle}" />
                                                 <TextBlock Text="{Binding VRam, StringFormat=VRAM: {0}}" Style="{StaticResource InfoRowKeyStyle}" />
+                                                <TextBlock Text="GPU Sıcaklığı:" Style="{StaticResource InfoRowKeyStyle}" />
+                                                <TextBlock Text="{Binding Temperature, Converter={StaticResource UnknownValue}, ConverterParameter=' °C'}" Style="{StaticResource InfoRowValueStyle}" />
                                             </StackPanel>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -327,6 +337,197 @@
                             </Grid>
                         </StackPanel>
                     </Border>
+
+                    <!-- Temperature Sensors Card -->
+                    <Border Style="{StaticResource CardStyle}" Width="380">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                                <TextBlock Text="🌡️" FontSize="20" Margin="0,0,10,0"/>
+                                <TextBlock Text="Sıcaklık Sensörleri" Style="{StaticResource CardHeaderStyle}" Margin="0"/>
+                            </StackPanel>
+
+                            <Border Style="{StaticResource StatusPill}" Background="#4CAF50">
+                                <TextBlock Text="{Binding SysInfo.TemperatureSensorSummaryText}" Foreground="White" FontWeight="Bold" TextWrapping="Wrap"/>
+                            </Border>
+
+                            <ItemsControl ItemsSource="{Binding SysInfo.TemperatureSensors}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="{Binding Name}" Style="{StaticResource InfoRowValueStyle}" Margin="0,2,10,0"/>
+                                                <TextBlock Text="{Binding Component}" Style="{StaticResource InfoRowKeyStyle}" Margin="0,0,10,2"/>
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="1" Text="{Binding TemperatureText}" Style="{StaticResource InfoRowValueStyle}" FontWeight="Bold"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Network Health Card -->
+                    <Border Style="{StaticResource CardStyle}" Width="380">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                                <TextBlock Text="🌐" FontSize="20" Margin="0,0,10,0"/>
+                                <TextBlock Text="Ağ Sağlığı" Style="{StaticResource CardHeaderStyle}" Margin="0"/>
+                            </StackPanel>
+
+                            <Border Style="{StaticResource StatusPill}" Background="{Binding SysInfo.NetworkHealth.Status, Converter={StaticResource StatusToColor}}">
+                                <TextBlock Text="{Binding SysInfo.NetworkHealth.Summary}" Foreground="White" FontWeight="Bold" TextWrapping="Wrap"/>
+                            </Border>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Bağlantı:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SysInfo.NetworkHealth.HasConnectionText}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="İnternet:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SysInfo.NetworkHealth.InternetReachableText}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Ping:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SysInfo.NetworkHealth.PingText}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Paket Kaybı:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SysInfo.NetworkHealth.PacketLossText}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="DNS:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SysInfo.NetworkHealth.DnsText}" Style="{StaticResource InfoRowValueStyle}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Primary Network Adapter Card -->
+                    <Border Style="{StaticResource CardStyle}" Width="380">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                                <TextBlock Text="📡" FontSize="20" Margin="0,0,10,0"/>
+                                <TextBlock Text="Ağ Bağdaştırıcısı" Style="{StaticResource CardHeaderStyle}" Margin="0"/>
+                            </StackPanel>
+
+                            <Border Style="{StaticResource StatusPill}" Background="{Binding SysInfo.PrimaryNetwork.Health, Converter={StaticResource StatusToColor}}">
+                                <TextBlock Text="{Binding SysInfo.NetworkAdapterSummaryText}" Foreground="White" FontWeight="Bold"/>
+                            </Border>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Ad:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SysInfo.PrimaryNetwork.Name}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Tür:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SysInfo.PrimaryNetwork.Type}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Durum:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SysInfo.PrimaryNetwork.StatusText}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="IP:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SysInfo.PrimaryNetwork.IpAddress}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="MAC:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SysInfo.PrimaryNetwork.MacAddress}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="5" Grid.Column="0" Text="Link:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SysInfo.PrimaryNetwork.LinkSpeed}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="6" Grid.Column="0" Text="İndirme:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding SysInfo.PrimaryNetwork.DownloadSpeed}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="7" Grid.Column="0" Text="Yükleme:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding SysInfo.PrimaryNetwork.UploadSpeed}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="8" Grid.Column="0" Text="Toplam:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="8" Grid.Column="1" Style="{StaticResource InfoRowValueStyle}">
+                                    <Run Text="↓ "/><Run Text="{Binding SysInfo.PrimaryNetwork.TotalDownloaded, Mode=OneWay}"/>
+                                    <Run Text=" / ↑ "/><Run Text="{Binding SysInfo.PrimaryNetwork.TotalUploaded, Mode=OneWay}"/>
+                                </TextBlock>
+
+                                <TextBlock Grid.Row="9" Grid.Column="0" Text="Sinyal:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="9" Grid.Column="1" Text="{Binding SysInfo.PrimaryNetwork.SignalText}" Style="{StaticResource InfoRowValueStyle}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Additional Network Adapter Cards -->
+                    <ItemsControl ItemsSource="{Binding SysInfo.AdditionalNetworks}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource CardStyle}" Width="380">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                                            <TextBlock Text="📡" FontSize="20" Margin="0,0,10,0"/>
+                                            <TextBlock Text="Ek Ağ Bağdaştırıcısı" Style="{StaticResource CardHeaderStyle}" Margin="0"/>
+                                        </StackPanel>
+
+                                        <Border Style="{StaticResource StatusPill}" Background="{Binding Health, Converter={StaticResource StatusToColor}}">
+                                            <TextBlock Text="{Binding HealthText}" Foreground="White" FontWeight="Bold"/>
+                                        </Border>
+
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+
+                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Ad:" Style="{StaticResource InfoRowKeyStyle}" />
+                                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Name}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Tür/Durum:" Style="{StaticResource InfoRowKeyStyle}" />
+                                            <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource InfoRowValueStyle}">
+                                                <Run Text="{Binding Type, Mode=OneWay}"/><Run Text=" / "/><Run Text="{Binding StatusText, Mode=OneWay}"/>
+                                            </TextBlock>
+
+                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="IP:" Style="{StaticResource InfoRowKeyStyle}" />
+                                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding IpAddress}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Link:" Style="{StaticResource InfoRowKeyStyle}" />
+                                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding LinkSpeed}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Anlık:" Style="{StaticResource InfoRowKeyStyle}" />
+                                            <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource InfoRowValueStyle}">
+                                                <Run Text="↓ "/><Run Text="{Binding DownloadSpeed, Mode=OneWay}"/>
+                                                <Run Text=" / ↑ "/><Run Text="{Binding UploadSpeed, Mode=OneWay}"/>
+                                            </TextBlock>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
 
                     <!-- Disk Cards -->
                     <ItemsControl ItemsSource="{Binding SysInfo.Disks}">
@@ -395,7 +596,7 @@
                     </ItemsControl>
 
                     <!-- Battery Card -->
-                    <Border Style="{StaticResource CardStyle}" Width="380" Visibility="{Binding SysInfo.Battery.IsPresent, Converter={StaticResource BoolToVis}}">
+                    <Border Style="{StaticResource CardStyle}" Width="380">
                         <StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
                                 <TextBlock Text="🔋" FontSize="20" Margin="0,0,10,0"/>
@@ -403,7 +604,7 @@
                             </StackPanel>
 
                             <Border Style="{StaticResource StatusPill}" Background="{Binding SysInfo.Battery.Status, Converter={StaticResource StatusToColor}}">
-                                <TextBlock Text="{Binding SysInfo.Battery.WearText}" Foreground="White" FontWeight="Bold"/>
+                                <TextBlock Text="{Binding SysInfo.Battery.SummaryText}" Foreground="White" FontWeight="Bold"/>
                             </Border>
 
                             <Grid>
@@ -418,13 +619,13 @@
                                 </Grid.RowDefinitions>
 
                                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Tasarım Kapasitesi:" Style="{StaticResource InfoRowKeyStyle}" />
-                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SysInfo.Battery.DesignCapacity, StringFormat={}{0} mWh}" Style="{StaticResource InfoRowValueStyle}" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SysInfo.Battery.DesignCapacityText}" Style="{StaticResource InfoRowValueStyle}" />
 
                                 <TextBlock Grid.Row="1" Grid.Column="0" Text="Tam Dolum Kaps.:" Style="{StaticResource InfoRowKeyStyle}" />
-                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SysInfo.Battery.FullChargeCapacity, StringFormat={}{0} mWh}" Style="{StaticResource InfoRowValueStyle}" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SysInfo.Battery.FullChargeCapacityText}" Style="{StaticResource InfoRowValueStyle}" />
 
                                 <TextBlock Grid.Row="2" Grid.Column="0" Text="Şarj Döngüsü:" Style="{StaticResource InfoRowKeyStyle}" />
-                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SysInfo.Battery.CycleCount, Converter={StaticResource UnknownValue}}" Style="{StaticResource InfoRowValueStyle}" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SysInfo.Battery.CycleCountText}" Style="{StaticResource InfoRowValueStyle}" />
                             </Grid>
                         </StackPanel>
                     </Border>

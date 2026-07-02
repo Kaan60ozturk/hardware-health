@@ -26,6 +26,7 @@ namespace HardwareScanner.Services
             // Donanım adı -> sıcaklık (GPU ve depolama eşlemesi için)
             public Dictionary<string, int> GpuTemps = new(StringComparer.OrdinalIgnoreCase);
             public Dictionary<string, int> StorageTemps = new(StringComparer.OrdinalIgnoreCase);
+            public List<TemperatureSensorInfo> Sensors = new();
         }
 
         private sealed class UpdateVisitor : IVisitor
@@ -75,6 +76,8 @@ namespace HardwareScanner.Services
                         _computer.Accept(new UpdateVisitor());
                         foreach (var hw in _computer.Hardware)
                         {
+                            CollectTemperatureSensors(hw, r);
+
                             switch (hw.HardwareType)
                             {
                                 case HardwareType.Cpu:
@@ -115,13 +118,42 @@ namespace HardwareScanner.Services
             return r;
         }
 
+        private static void CollectTemperatureSensors(IHardware hw, Readings readings)
+        {
+            foreach (var sensor in hw.Sensors)
+            {
+                if (sensor.SensorType != SensorType.Temperature || !sensor.Value.HasValue) continue;
+
+                int value = (int)Math.Round(sensor.Value.Value);
+                if (value <= 0 || value >= 130) continue;
+
+                readings.Sensors.Add(new TemperatureSensorInfo
+                {
+                    Component = hw.HardwareType.ToString(),
+                    Name = $"{hw.Name} - {sensor.Name}",
+                    Temperature = value
+                });
+            }
+
+            foreach (var sub in hw.SubHardware)
+            {
+                CollectTemperatureSensors(sub, readings);
+            }
+        }
+
         private static int ReadCpuTemp(IHardware cpu)
         {
-            // Tercih sırası: CPU Package > Core (Tmax) > çekirdek ortalaması/maksimumu
+            // Tercih sırası: CPU Package/Tctl > Core > herhangi geçerli CPU sıcaklığı.
+            // Bazı sistemlerde çekirdek sensörleri "Core #1" gibi isimlenir; sadece
+            // "CPU Core" ile başlayanları aramak bu değerleri kaçırıyordu.
             return ReadSensor(cpu, "CPU Package")
+                ?? ReadSensor(cpu, "CPU Tctl/Tdie")
+                ?? ReadSensor(cpu, "CPU Tdie")
+                ?? ReadSensor(cpu, "CCD1 (Tdie)")
                 ?? ReadSensor(cpu, "Core (Tmax)")
                 ?? ReadSensor(cpu, "Core Average")
                 ?? MaxCoreTemp(cpu)
+                ?? ReadBestTemperature(cpu)
                 ?? -1;
         }
 
@@ -157,8 +189,20 @@ namespace HardwareScanner.Services
         {
             var temps = hw.Sensors
                 .Where(x => x.SensorType == SensorType.Temperature && x.Value.HasValue &&
-                            x.Name.StartsWith("CPU Core", StringComparison.OrdinalIgnoreCase))
+                            (x.Name.StartsWith("CPU Core", StringComparison.OrdinalIgnoreCase) ||
+                             x.Name.StartsWith("Core #", StringComparison.OrdinalIgnoreCase) ||
+                             x.Name.StartsWith("Core ", StringComparison.OrdinalIgnoreCase)))
                 .Select(x => x.Value!.Value)
+                .ToList();
+            return temps.Count > 0 ? (int)Math.Round(temps.Max()) : (int?)null;
+        }
+
+        private static int? ReadBestTemperature(IHardware hw)
+        {
+            var temps = hw.Sensors
+                .Where(x => x.SensorType == SensorType.Temperature && x.Value.HasValue)
+                .Select(x => x.Value!.Value)
+                .Where(v => v > 0 && v < 130)
                 .ToList();
             return temps.Count > 0 ? (int)Math.Round(temps.Max()) : (int?)null;
         }

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Management;
 using HardwareScanner.Models;
 using Microsoft.Win32;
 
@@ -329,12 +328,12 @@ namespace HardwareScanner.Services
                 os.Version = build != "Bilinmiyor" ? $"{version} (Build {build})" : version;
                 os.Architecture = WmiHelper.GetString(row, "OSArchitecture");
 
-                if (TryParseDmtfDate(WmiHelper.GetString(row, "InstallDate", ""), out DateTime installDate))
+                if (WmiHelper.TryParseWmiDate(WmiHelper.GetString(row, "InstallDate", ""), out DateTime installDate))
                 {
                     os.InstallDate = installDate.ToString("dd.MM.yyyy");
                 }
 
-                if (TryParseDmtfDate(WmiHelper.GetString(row, "LastBootUpTime", ""), out DateTime bootTime))
+                if (WmiHelper.TryParseWmiDate(WmiHelper.GetString(row, "LastBootUpTime", ""), out DateTime bootTime))
                 {
                     TimeSpan uptime = DateTime.Now - bootTime;
                     if (uptime.TotalSeconds > 0)
@@ -357,31 +356,13 @@ namespace HardwareScanner.Services
             if (biosResults.Count > 0)
             {
                 os.BiosVersion = WmiHelper.GetString(biosResults[0], "SMBIOSBIOSVersion");
-                if (TryParseDmtfDate(WmiHelper.GetString(biosResults[0], "ReleaseDate", ""), out DateTime biosDate))
+                if (WmiHelper.TryParseWmiDate(WmiHelper.GetString(biosResults[0], "ReleaseDate", ""), out DateTime biosDate))
                 {
                     os.BiosDate = biosDate.ToString("dd.MM.yyyy");
                 }
             }
 
             return os;
-        }
-
-        /// <summary>
-        /// WMI'nin DMTF tarih formatını (ör. "20230415123045.500000+180") DateTime'a çevirir.
-        /// </summary>
-        private static bool TryParseDmtfDate(string dmtf, out DateTime result)
-        {
-            result = default;
-            if (string.IsNullOrWhiteSpace(dmtf)) return false;
-            try
-            {
-                result = ManagementDateTimeConverter.ToDateTime(dmtf);
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
         }
     }
 }

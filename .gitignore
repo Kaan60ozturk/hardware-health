@@ -2,6 +2,8 @@
 bin/
 obj/
 publish/
+publish-latest/
+raporlar/
 
 # Visual Studio / .NET local state
 .vs/

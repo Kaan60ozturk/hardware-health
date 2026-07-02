@@ -27,11 +27,24 @@ namespace HardwareScanner.Services
             try { interfaces = NetworkInterface.GetAllNetworkInterfaces(); }
             catch (Exception ex) { AppLog.Write("Network interfaces error: " + ex.Message); return list; }
 
-            // İlgili bağdaştırıcıları filtrele (loopback/tünel hariç, çalışır durumda)
-            var relevant = interfaces.Where(ni =>
-                ni.NetworkInterfaceType != NetworkInterfaceType.Loopback &&
-                ni.NetworkInterfaceType != NetworkInterfaceType.Tunnel &&
-                ni.OperationalStatus == OperationalStatus.Up).ToList();
+            // İlgili bağdaştırıcıları filtrele (loopback/tünel hariç). Aktif olanlar
+            // öncelikli; hiç aktif kart bulunamazsa fiziksel adayları yine göster.
+            var candidates = interfaces.Where(IsRelevantInterface).ToList();
+            var relevant = candidates
+                .Where(ni => ni.OperationalStatus == OperationalStatus.Up)
+                .OrderBy(IsVirtualInterface)
+                .ThenBy(ni => ni.NetworkInterfaceType == NetworkInterfaceType.Wireless80211 ? 0 : 1)
+                .ThenBy(ni => ni.Name)
+                .ToList();
+
+            if (relevant.Count == 0)
+            {
+                relevant = candidates
+                    .OrderBy(IsVirtualInterface)
+                    .ThenBy(ni => ni.NetworkInterfaceType == NetworkInterfaceType.Wireless80211 ? 0 : 1)
+                    .ThenBy(ni => ni.Name)
+                    .ToList();
+            }
 
             // Anlık hız için iki örnek al: önce tüm sayaçları oku, ~1sn bekle, tekrar oku
             var firstBytes = new Dictionary<string, (long rx, long tx)>();
@@ -55,8 +68,8 @@ namespace HardwareScanner.Services
                 try
                 {
                     info.Name = ni.Description;
-                    info.IsUp = true;
-                    info.StatusText = "Bağlı";
+                    info.IsUp = ni.OperationalStatus == OperationalStatus.Up;
+                    info.StatusText = info.IsUp ? "Bağlı" : "Bağlı Değil";
                     info.IsWifi = ni.NetworkInterfaceType == NetworkInterfaceType.Wireless80211;
                     info.Type = info.IsWifi ? "Wi-Fi"
                         : ni.NetworkInterfaceType == NetworkInterfaceType.Ethernet ? "Ethernet"
@@ -103,7 +116,12 @@ namespace HardwareScanner.Services
                     // Sağlık: gönderme/alma hatalarına bak
                     long errors = 0;
                     try { errors = stats.IncomingPacketsWithErrors + stats.OutgoingPacketsWithErrors; } catch { }
-                    if (info.IsWifi && info.SignalPercent >= 0 && info.SignalPercent < 40)
+                    if (!info.IsUp)
+                    {
+                        info.Health = HealthStatus.Unknown;
+                        info.HealthText = "Bağlı Değil";
+                    }
+                    else if (info.IsWifi && info.SignalPercent >= 0 && info.SignalPercent < 40)
                     {
                         info.Health = HealthStatus.Warning;
                         info.HealthText = "Zayıf Sinyal";
@@ -129,6 +147,32 @@ namespace HardwareScanner.Services
             }
 
             return list;
+        }
+
+        private static bool IsRelevantInterface(NetworkInterface ni)
+        {
+            if (ni.NetworkInterfaceType == NetworkInterfaceType.Loopback ||
+                ni.NetworkInterfaceType == NetworkInterfaceType.Tunnel)
+            {
+                return false;
+            }
+
+            string name = (ni.Name + " " + ni.Description).ToLowerInvariant();
+            return !name.Contains("wi-fi direct") &&
+                   !name.Contains("wifi direct") &&
+                   !name.Contains("teredo") &&
+                   !name.Contains("isatap") &&
+                   !name.Contains("pseudo");
+        }
+
+        private static bool IsVirtualInterface(NetworkInterface ni)
+        {
+            string name = (ni.Name + " " + ni.Description).ToLowerInvariant();
+            return name.Contains("virtual") ||
+                   name.Contains("hyper-v") ||
+                   name.Contains("wsl") ||
+                   name.Contains("vmware") ||
+                   name.Contains("virtualbox");
         }
 
         /// <summary>
