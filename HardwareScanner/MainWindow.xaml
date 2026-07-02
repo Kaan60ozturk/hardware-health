@@ -1,0 +1,461 @@
+<Window x:Class="HardwareScanner.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:HardwareScanner"
+        xmlns:viewmodels="clr-namespace:HardwareScanner.ViewModels"
+        xmlns:converters="clr-namespace:HardwareScanner.Converters"
+        mc:Ignorable="d"
+        Title="Donanım Teşhis Aracı" Height="750" Width="1100"
+        WindowStartupLocation="CenterScreen" Background="#F0F2F5" FontFamily="Segoe UI">
+
+    <Window.DataContext>
+        <viewmodels:MainViewModel />
+    </Window.DataContext>
+
+    <Window.Resources>
+        <converters:HealthStatusToColorConverter x:Key="StatusToColor" />
+        <converters:ValueToStrokeDashArrayConverter x:Key="StrokeDashConverter" Radius="54" StrokeThickness="12" />
+        <converters:UnknownValueConverter x:Key="UnknownValue" />
+        <converters:InverseBooleanConverter x:Key="InverseBool" />
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+
+        <!-- Card Style -->
+        <Style x:Key="CardStyle" TargetType="Border">
+            <Setter Property="Background" Value="White" />
+            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="Margin" Value="10" />
+            <Setter Property="Padding" Value="20" />
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect Color="#11000000" BlurRadius="15" ShadowDepth="4" Opacity="1" />
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="CardHeaderStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="18" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="#1F2937" />
+            <Setter Property="Margin" Value="0,0,0,15" />
+        </Style>
+
+        <Style x:Key="InfoRowKeyStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="#6B7280" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,4,10,4" />
+        </Style>
+
+        <Style x:Key="InfoRowValueStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Foreground" Value="#111827" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="Margin" Value="0,4,0,4" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        
+        <!-- Sidebar Button Style -->
+        <Style x:Key="SidebarButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#D1D5DB"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="20,15"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#374151"/>
+                    <Setter Property="Foreground" Value="White"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Status Pill Style -->
+        <Style x:Key="StatusPill" TargetType="Border">
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="10,4"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="Margin" Value="0,0,0,10"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="250" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Sidebar -->
+        <Border Grid.Column="0" Background="#1F2937">
+            <StackPanel>
+                <TextBlock Text="Teşhis Aracı" FontSize="26" FontWeight="Bold" Foreground="White" Margin="20,30,20,40" />
+                
+                <Button Content="📊  Genel Bakış" Style="{StaticResource SidebarButtonStyle}" Background="#374151" Foreground="White"/>
+                <Button Content="🔄  Yenile" Style="{StaticResource SidebarButtonStyle}" Click="BtnRefresh_Click"
+                        IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBool}}"/>
+                <Button Content="💾  Raporu Kaydet" Style="{StaticResource SidebarButtonStyle}" Click="BtnSaveReport_Click"
+                        IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBool}}"/>
+                <Button Content="📋  Panoya Kopyala" Style="{StaticResource SidebarButtonStyle}" Click="BtnCopyReport_Click"
+                        IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBool}}"/>
+                
+                <TextBlock Text="Sistem Analizi Devam Ediyor..." FontSize="12" Foreground="#9CA3AF" Margin="20,400,20,0" Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Main Content -->
+        <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- Dashboard Header / Gauge Area -->
+            <Border Grid.Row="0" Style="{StaticResource CardStyle}" Margin="20,20,20,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="Sistem Sağlığı Özeti" FontSize="24" FontWeight="Bold" Foreground="#111827" Margin="0,0,0,10"/>
+                        <Border Style="{StaticResource StatusPill}" Background="{Binding SysInfo.OverallStatus, Converter={StaticResource StatusToColor}}">
+                            <TextBlock Text="{Binding SysInfo.OverallSummary}" Foreground="White" FontWeight="Bold"/>
+                        </Border>
+                        <TextBlock FontSize="14" Foreground="#6B7280" TextWrapping="Wrap" Margin="0,10,0,0">
+                            <Run Text="{Binding SysInfo.Os.ComputerManufacturer, Mode=OneWay}"/>
+                            <Run Text="{Binding SysInfo.Os.ComputerModel, Mode=OneWay}"/>
+                            <Run Text=" — Son Tarama: "/>
+                            <Run Text="{Binding SysInfo.ScanDate, Mode=OneWay, StringFormat=dd.MM.yyyy HH:mm}"/>
+                        </TextBlock>
+                    </StackPanel>
+                    
+                    <!-- Circular Health Gauge -->
+                    <Grid Grid.Column="1" Width="140" Height="140" Margin="20,0,0,0">
+                        <!-- Background Circle -->
+                        <Ellipse Width="120" Height="120" Stroke="#E5E7EB" StrokeThickness="12" />
+                        
+                        <!-- Progress Arc -->
+                        <Ellipse Width="120" Height="120" Stroke="{Binding SysInfo.OverallStatus, Converter={StaticResource StatusToColor}}" StrokeThickness="12"
+                                 StrokeDashArray="{Binding SysInfo.OverallScore, Converter={StaticResource StrokeDashConverter}}"
+                                 StrokeDashCap="Round" RenderTransformOrigin="0.5, 0.5">
+                            <Ellipse.RenderTransform>
+                                <RotateTransform Angle="-90" />
+                            </Ellipse.RenderTransform>
+                        </Ellipse>
+                        
+                        <!-- Score Text -->
+                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                            <TextBlock Text="{Binding SysInfo.OverallScore, StringFormat={}{0}}" FontSize="32" FontWeight="Bold" Foreground="#1F2937" HorizontalAlignment="Center" Margin="0,0,0,-5"/>
+                            <TextBlock Text="/ 100" FontSize="14" Foreground="#9CA3AF" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <!-- Hardware Cards Grid -->
+            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="10">
+                <WrapPanel Orientation="Horizontal">
+
+                    <!-- System / OS Card -->
+                    <Border Style="{StaticResource CardStyle}" Width="380">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <TextBlock Text="🖥️" FontSize="20" Margin="0,0,10,0"/>
+                                <TextBlock Text="Sistem" Style="{StaticResource CardHeaderStyle}" Margin="0"/>
+                            </StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Bilgisayar:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource InfoRowValueStyle}">
+                                    <Run Text="{Binding SysInfo.Os.ComputerManufacturer, Mode=OneWay}"/>
+                                    <Run Text="{Binding SysInfo.Os.ComputerModel, Mode=OneWay}"/>
+                                </TextBlock>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="İşl. Sistemi:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SysInfo.Os.Caption}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Sürüm:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SysInfo.Os.Version}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Mimari:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SysInfo.Os.Architecture}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="Kurulum:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SysInfo.Os.InstallDate}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="5" Grid.Column="0" Text="Açık Kalma:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SysInfo.Os.Uptime}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="6" Grid.Column="0" Text="BIOS:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="6" Grid.Column="1" Style="{StaticResource InfoRowValueStyle}">
+                                    <Run Text="{Binding SysInfo.Os.BiosVersion, Mode=OneWay}"/>
+                                    <Run Text="("/><Run Text="{Binding SysInfo.Os.BiosDate, Mode=OneWay}"/><Run Text=")"/>
+                                </TextBlock>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- CPU Card -->
+                    <Border Style="{StaticResource CardStyle}" Width="380">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <TextBlock Text="⚙️" FontSize="20" Margin="0,0,10,0"/>
+                                <TextBlock Text="İşlemci (CPU)" Style="{StaticResource CardHeaderStyle}" Margin="0"/>
+                            </StackPanel>
+
+                            <Border Style="{StaticResource StatusPill}" Background="{Binding SysInfo.Cpu.Health, Converter={StaticResource StatusToColor}}">
+                                <TextBlock Text="{Binding SysInfo.Cpu.HealthText}" Foreground="White" FontWeight="Bold"/>
+                            </Border>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Model:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SysInfo.Cpu.Model}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Çekirdek:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SysInfo.Cpu.Cores}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Mantıksal:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SysInfo.Cpu.LogicalProcessors}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Hız:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SysInfo.Cpu.Speed}" Style="{StaticResource InfoRowValueStyle}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- RAM Card -->
+                    <Border Style="{StaticResource CardStyle}" Width="380">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <TextBlock Text="🧠" FontSize="20" Margin="0,0,10,0"/>
+                                <TextBlock Text="Bellek (RAM)" Style="{StaticResource CardHeaderStyle}" Margin="0"/>
+                            </StackPanel>
+
+                            <Border Style="{StaticResource StatusPill}" Background="{Binding SysInfo.Ram.Health, Converter={StaticResource StatusToColor}}">
+                                <TextBlock Text="{Binding SysInfo.Ram.HealthText}" Foreground="White" FontWeight="Bold"/>
+                            </Border>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Boyut:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SysInfo.Ram.TotalSize}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Hız:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SysInfo.Ram.Speed}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Tür:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SysInfo.Ram.Type}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Durum:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SysInfo.Ram.SlotsInfo}" Style="{StaticResource InfoRowValueStyle}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Motherboard & GPU Container -->
+                    <Border Style="{StaticResource CardStyle}" Width="380">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <TextBlock Text="🎛️" FontSize="20" Margin="0,0,10,0"/>
+                                <TextBlock Text="Anakart &amp; Grafik" Style="{StaticResource CardHeaderStyle}" Margin="0"/>
+                            </StackPanel>
+                            <Border Style="{StaticResource StatusPill}" Background="{Binding SysInfo.Motherboard.Health, Converter={StaticResource StatusToColor}}">
+                                <TextBlock Text="{Binding SysInfo.Motherboard.HealthText}" Foreground="White" FontWeight="Bold"/>
+                            </Border>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Ana. Üretici:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SysInfo.Motherboard.Manufacturer}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Ana. Model:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SysInfo.Motherboard.Model}" Style="{StaticResource InfoRowValueStyle}" />
+                                
+                                <ItemsControl Grid.Row="2" Grid.ColumnSpan="2" ItemsSource="{Binding SysInfo.Gpus}" Margin="0,10,0,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Margin="0,0,0,10">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Border Style="{StaticResource StatusPill}" Background="{Binding Health, Converter={StaticResource StatusToColor}}" Margin="0,0,10,0">
+                                                        <TextBlock Text="{Binding HealthText}" Foreground="White" FontWeight="Bold"/>
+                                                    </Border>
+                                                </StackPanel>
+                                                <TextBlock Text="GPU Modeli:" Style="{StaticResource InfoRowKeyStyle}" />
+                                                <TextBlock Text="{Binding Model}" Style="{StaticResource InfoRowValueStyle}" />
+                                                <TextBlock Text="{Binding VRam, StringFormat=VRAM: {0}}" Style="{StaticResource InfoRowKeyStyle}" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Disk Cards -->
+                    <ItemsControl ItemsSource="{Binding SysInfo.Disks}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource CardStyle}" Width="380">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                                            <TextBlock Text="💾" FontSize="20" Margin="0,0,10,0"/>
+                                            <TextBlock Text="Depolama Sürücüsü" Style="{StaticResource CardHeaderStyle}" Margin="0"/>
+                                        </StackPanel>
+                                        
+                                        <Border Style="{StaticResource StatusPill}" Background="{Binding Status, Converter={StaticResource StatusToColor}}">
+                                            <TextBlock Text="{Binding StatusText}" Foreground="White" FontWeight="Bold"/>
+                                        </Border>
+                                        
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+
+                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Model:" Style="{StaticResource InfoRowKeyStyle}" />
+                                            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Model}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Seri No:" Style="{StaticResource InfoRowKeyStyle}" />
+                                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SerialNumber}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Kapasite/Tür:" Style="{StaticResource InfoRowKeyStyle}" />
+                                            <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Capacity}" Style="{StaticResource InfoRowValueStyle}" Margin="0,4,5,4" />
+                                                <TextBlock Text="/" Style="{StaticResource InfoRowValueStyle}" Margin="0,4,5,4" />
+                                                <TextBlock Text="{Binding Type}" Style="{StaticResource InfoRowValueStyle}" Margin="0,4,0,4" />
+                                            </StackPanel>
+
+                                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Arayüz:" Style="{StaticResource InfoRowKeyStyle}" />
+                                            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding InterfaceType}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Sıcaklık:" Style="{StaticResource InfoRowKeyStyle}" />
+                                            <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding Temperature, Converter={StaticResource UnknownValue}, ConverterParameter=' °C'}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                            <TextBlock Grid.Row="5" Grid.Column="0" Text="Çalışma:" Style="{StaticResource InfoRowKeyStyle}" />
+                                            <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding PowerOnHours, Converter={StaticResource UnknownValue}, ConverterParameter=' Saat'}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                            <TextBlock Grid.Row="6" Grid.Column="0" Text="Yazılan:" Style="{StaticResource InfoRowKeyStyle}" />
+                                            <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding Tbw, Converter={StaticResource UnknownValue}, ConverterParameter=' TB'}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                            <TextBlock Grid.Row="7" Grid.Column="0" Text="Okunan:" Style="{StaticResource InfoRowKeyStyle}" />
+                                            <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding DataRead, Converter={StaticResource UnknownValue}, ConverterParameter=' TB'}" Style="{StaticResource InfoRowValueStyle}" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Battery Card -->
+                    <Border Style="{StaticResource CardStyle}" Width="380" Visibility="{Binding SysInfo.Battery.IsPresent, Converter={StaticResource BoolToVis}}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                                <TextBlock Text="🔋" FontSize="20" Margin="0,0,10,0"/>
+                                <TextBlock Text="Batarya (Pil)" Style="{StaticResource CardHeaderStyle}" Margin="0"/>
+                            </StackPanel>
+
+                            <Border Style="{StaticResource StatusPill}" Background="{Binding SysInfo.Battery.Status, Converter={StaticResource StatusToColor}}">
+                                <TextBlock Text="{Binding SysInfo.Battery.WearText}" Foreground="White" FontWeight="Bold"/>
+                            </Border>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Tasarım Kapasitesi:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SysInfo.Battery.DesignCapacity, StringFormat={}{0} mWh}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Tam Dolum Kaps.:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SysInfo.Battery.FullChargeCapacity, StringFormat={}{0} mWh}" Style="{StaticResource InfoRowValueStyle}" />
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Şarj Döngüsü:" Style="{StaticResource InfoRowKeyStyle}" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SysInfo.Battery.CycleCount, Converter={StaticResource UnknownValue}}" Style="{StaticResource InfoRowValueStyle}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                    
+                </WrapPanel>
+            </ScrollViewer>
+
+            <!-- Loading Overlay -->
+            <Grid Grid.RowSpan="2" Background="#99FFFFFF" Visibility="{Binding IsLoading, Converter={StaticResource BoolToVis}}">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <!-- Simple pure XAML spinner -->
+                    <Ellipse Width="50" Height="50" Stroke="#3B82F6" StrokeThickness="5" StrokeDashArray="2 1" RenderTransformOrigin="0.5,0.5">
+                        <Ellipse.RenderTransform>
+                            <RotateTransform x:Name="SpinnerTransform" Angle="0"/>
+                        </Ellipse.RenderTransform>
+                        <Ellipse.Triggers>
+                            <EventTrigger RoutedEvent="Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="SpinnerTransform" 
+                                                         Storyboard.TargetProperty="Angle" 
+                                                         From="0" To="360" Duration="0:0:1" 
+                                                         RepeatBehavior="Forever" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </Ellipse.Triggers>
+                    </Ellipse>
+                    <TextBlock Text="Analiz Ediliyor..." FontSize="18" FontWeight="Bold" Foreground="#1F2937" Margin="0,15,0,0" />
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>
