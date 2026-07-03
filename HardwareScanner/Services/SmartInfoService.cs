@@ -14,6 +14,7 @@ namespace HardwareScanner.Services
     {
         private readonly string tempDirectory;
         private readonly string tempSmartctlPath;
+        private List<SmartctlScanDevice>? _scanDevices;
         private bool _disposed;
 
         public SmartInfoService()
@@ -219,7 +220,7 @@ namespace HardwareScanner.Services
             try
             {
                 // WMI DeviceID formatı genellikle \\.\PHYSICALDRIVE0 şeklindedir
-                string arg = $"-a -j \"{deviceId}\"";
+                string arg = GetBestSmartctlArgument(deviceId, disk);
                 using var proc = new Process
                 {
                     StartInfo = new ProcessStartInfo
@@ -304,6 +305,14 @@ namespace HardwareScanner.Services
                     disk.Type = "NVMe SSD";
                     if (disk.InterfaceType == "Bilinmiyor") disk.InterfaceType = "NVMe";
 
+                    if (disk.Temperature < 0 && log["temperature"] is JToken nvmeTempToken)
+                    {
+                        disk.Temperature = nvmeTempToken.Value<int>();
+                    }
+                    if (disk.PowerOnHours < 0 && log["power_on_hours"] is JToken nvmeHoursToken)
+                    {
+                        disk.PowerOnHours = nvmeHoursToken.Value<long>();
+                    }
                     if (log["percentage_used"] is JToken usedToken)
                     {
                         int used = usedToken.Value<int>();
@@ -403,6 +412,159 @@ namespace HardwareScanner.Services
                 AppLog.Write($"smartctl parse error for {deviceId}: {ex.Message}");
                 return false;
             }
+        }
+
+        private string GetBestSmartctlArgument(string deviceId, DiskInfo disk)
+        {
+            bool likelyNvme = IsLikelyNvme(disk);
+            int? physicalIndex = TryGetPhysicalDriveIndex(deviceId);
+
+            foreach (var scanDevice in GetSmartctlScanDevices())
+            {
+                bool indexMatches = physicalIndex.HasValue && scanDevice.PhysicalDriveIndex == physicalIndex.Value;
+                bool typeMatches = !physicalIndex.HasValue && likelyNvme && IsNvmeText(scanDevice.Protocol + " " + scanDevice.Type);
+
+                if (indexMatches || typeMatches)
+                {
+                    string deviceType = !string.IsNullOrWhiteSpace(scanDevice.Type)
+                        ? scanDevice.Type
+                        : likelyNvme ? "nvme" : "";
+                    return BuildSmartctlArgument(scanDevice.Name, deviceType);
+                }
+            }
+
+            if (physicalIndex is int index && index >= 0 && index < 26)
+            {
+                string smartctlAlias = "/dev/sd" + (char)('a' + index);
+                return BuildSmartctlArgument(smartctlAlias, likelyNvme ? "nvme" : "");
+            }
+
+            return BuildSmartctlArgument(deviceId, likelyNvme ? "nvme" : "");
+        }
+
+        private static string BuildSmartctlArgument(string deviceName, string? deviceType)
+        {
+            return string.IsNullOrWhiteSpace(deviceType)
+                ? $"-a -j \"{deviceName}\""
+                : $"-a -j -d {deviceType} \"{deviceName}\"";
+        }
+
+        private List<SmartctlScanDevice> GetSmartctlScanDevices()
+        {
+            if (_scanDevices != null) return _scanDevices;
+
+            _scanDevices = new List<SmartctlScanDevice>();
+
+            try
+            {
+                using var proc = new Process
+                {
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = tempSmartctlPath,
+                        Arguments = "--scan-open -j",
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true
+                    }
+                };
+
+                proc.Start();
+                var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+                var stderrTask = proc.StandardError.ReadToEndAsync();
+
+                if (!proc.WaitForExit(30000))
+                {
+                    try { proc.Kill(entireProcessTree: true); } catch { }
+                    AppLog.Write("smartctl scan timeout");
+                    return _scanDevices;
+                }
+
+                proc.WaitForExit();
+
+                string output = stdoutTask.GetAwaiter().GetResult();
+                string stderr = stderrTask.GetAwaiter().GetResult();
+                if (string.IsNullOrWhiteSpace(output))
+                {
+                    AppLog.Write("smartctl scan empty output: " + stderr);
+                    return _scanDevices;
+                }
+
+                JObject json = JObject.Parse(output);
+                if (json["devices"] is not JArray devices)
+                {
+                    return _scanDevices;
+                }
+
+                foreach (var item in devices)
+                {
+                    string name = item["name"]?.ToString() ?? "";
+                    if (string.IsNullOrWhiteSpace(name)) continue;
+
+                    string openError = item["open_error"]?.ToString() ?? "";
+                    _scanDevices.Add(new SmartctlScanDevice
+                    {
+                        Name = name,
+                        Type = item["type"]?.ToString() ?? "",
+                        Protocol = item["protocol"]?.ToString() ?? "",
+                        PhysicalDriveIndex = TryGetPhysicalDriveIndex(openError) ?? TryGetSmartctlAliasIndex(name)
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write("smartctl scan error: " + ex.Message);
+            }
+
+            return _scanDevices;
+        }
+
+        private static bool IsLikelyNvme(DiskInfo disk)
+        {
+            return IsNvmeText(disk.InterfaceType)
+                || IsNvmeText(disk.Type)
+                || IsNvmeText(disk.Model);
+        }
+
+        private static bool IsNvmeText(string? value)
+        {
+            return !string.IsNullOrWhiteSpace(value)
+                && value.IndexOf("NVMe", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static int? TryGetPhysicalDriveIndex(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+
+            const string marker = "PHYSICALDRIVE";
+            int markerIndex = value.LastIndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (markerIndex < 0) return null;
+
+            int start = markerIndex + marker.Length;
+            int end = start;
+            while (end < value.Length && char.IsDigit(value[end])) end++;
+
+            return int.TryParse(value.Substring(start, end - start), out int index) ? index : null;
+        }
+
+        private static int? TryGetSmartctlAliasIndex(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value) || !value.StartsWith("/dev/sd", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            char suffix = value[value.Length - 1];
+            if (suffix >= 'a' && suffix <= 'z') return suffix - 'a';
+            if (suffix >= 'A' && suffix <= 'Z') return suffix - 'A';
+            return null;
+        }
+
+        private sealed class SmartctlScanDevice
+        {
+            public string Name { get; init; } = "";
+            public string Type { get; init; } = "";
+            public string Protocol { get; init; } = "";
+            public int? PhysicalDriveIndex { get; init; }
         }
 
         private void CleanupTempFile()
