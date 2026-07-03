@@ -220,7 +220,8 @@ namespace HardwareScanner.Services
             try
             {
                 // WMI DeviceID formatı genellikle \\.\PHYSICALDRIVE0 şeklindedir
-                string arg = GetBestSmartctlArgument(deviceId, disk);
+                foreach (string arg in GetSmartctlArguments(deviceId, disk))
+                {
                 using var proc = new Process
                 {
                     StartInfo = new ProcessStartInfo
@@ -255,13 +256,26 @@ namespace HardwareScanner.Services
                 // Çıkış kodu bit 0: komut satırı hatası, bit 1: cihaz açılamadı (ör. yönetici izni yok)
                 if ((proc.ExitCode & 0x03) != 0)
                 {
-                    AppLog.Write($"smartctl failed for {deviceId} (exit code {proc.ExitCode}): {stderr}");
-                    return false;
+                    AppLog.Write($"smartctl failed for {deviceId} using {arg} (exit code {proc.ExitCode}): {stderr}");
+                    continue;
                 }
 
-                if (string.IsNullOrWhiteSpace(output)) return false;
+                if (string.IsNullOrWhiteSpace(output))
+                {
+                    AppLog.Write($"smartctl empty output for {deviceId} using {arg}");
+                    continue;
+                }
 
-                JObject json = JObject.Parse(output);
+                JObject json;
+                try
+                {
+                    json = JObject.Parse(output);
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Write($"smartctl JSON parse error for {deviceId} using {arg}: {ex.Message}");
+                    continue;
+                }
 
                 // Temel alanlar
                 disk.Model = json["model_name"]?.ToString() ?? disk.Model;
@@ -405,7 +419,11 @@ namespace HardwareScanner.Services
                     disk.Status = HealthStatus.Good;
                 }
 
+                AppLog.Write($"smartctl ok for {deviceId} using {arg}: hours={disk.PowerOnHours}, writtenTB={disk.Tbw}, readTB={disk.DataRead}");
                 return true;
+                }
+
+                return false;
             }
             catch (Exception ex)
             {
@@ -416,6 +434,17 @@ namespace HardwareScanner.Services
 
         private string GetBestSmartctlArgument(string deviceId, DiskInfo disk)
         {
+            foreach (string arg in GetSmartctlArguments(deviceId, disk))
+            {
+                return arg;
+            }
+
+            return BuildSmartctlArgument(deviceId, "");
+        }
+
+        private IEnumerable<string> GetSmartctlArguments(string deviceId, DiskInfo disk)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             bool likelyNvme = IsLikelyNvme(disk);
             int? physicalIndex = TryGetPhysicalDriveIndex(deviceId);
 
@@ -429,17 +458,27 @@ namespace HardwareScanner.Services
                     string deviceType = !string.IsNullOrWhiteSpace(scanDevice.Type)
                         ? scanDevice.Type
                         : likelyNvme ? "nvme" : "";
-                    return BuildSmartctlArgument(scanDevice.Name, deviceType);
+
+                    foreach (string arg in BuildSmartctlArgumentsForDevice(scanDevice.Name, deviceType, likelyNvme))
+                    {
+                        if (seen.Add(arg)) yield return arg;
+                    }
                 }
             }
 
             if (physicalIndex is int index && index >= 0 && index < 26)
             {
                 string smartctlAlias = "/dev/sd" + (char)('a' + index);
-                return BuildSmartctlArgument(smartctlAlias, likelyNvme ? "nvme" : "");
+                foreach (string arg in BuildSmartctlArgumentsForDevice(smartctlAlias, likelyNvme ? "nvme" : "", likelyNvme))
+                {
+                    if (seen.Add(arg)) yield return arg;
+                }
             }
 
-            return BuildSmartctlArgument(deviceId, likelyNvme ? "nvme" : "");
+            foreach (string arg in BuildSmartctlArgumentsForDevice(deviceId, likelyNvme ? "nvme" : "", likelyNvme))
+            {
+                if (seen.Add(arg)) yield return arg;
+            }
         }
 
         private static string BuildSmartctlArgument(string deviceName, string? deviceType)
@@ -447,6 +486,21 @@ namespace HardwareScanner.Services
             return string.IsNullOrWhiteSpace(deviceType)
                 ? $"-a -j \"{deviceName}\""
                 : $"-a -j -d {deviceType} \"{deviceName}\"";
+        }
+
+        private static IEnumerable<string> BuildSmartctlArgumentsForDevice(string deviceName, string? deviceType, bool likelyNvme)
+        {
+            if (!string.IsNullOrWhiteSpace(deviceType))
+            {
+                yield return BuildSmartctlArgument(deviceName, deviceType);
+            }
+
+            if (likelyNvme && !string.Equals(deviceType, "nvme", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return BuildSmartctlArgument(deviceName, "nvme");
+            }
+
+            yield return BuildSmartctlArgument(deviceName, "");
         }
 
         private List<SmartctlScanDevice> GetSmartctlScanDevices()
