@@ -1,3 +1,16 @@
+<img width="1577" height="250" alt="image" src="https://github.com/user-attachments/assets/18f91c88-1589-4304-a2ff-a67a46db407a" />
+<img width="1500" height="354" alt="image" src="https://github.com/user-attachments/assets/66c27018-480b-4ab0-9102-e7303ca6cc46" />
+<img width="1503" height="664" alt="image" src="https://github.com/user-attachments/assets/9df635b2-affa-462b-aec0-3d0f091409f8" />
+<img width="1499" height="494" alt="image" src="https://github.com/user-attachments/assets/adf0aebb-b989-43a5-97e5-697fc54647b2" />
+<img width="1500" height="265" alt="image" src="https://github.com/user-attachments/assets/9f577ac6-97f3-46bb-ba97-02fce3e8af9e" />
+
+
+
+
+
+
+
+
 # Hardware Health
 
 Windows için WPF tabanlı donanım sağlık ve teşhis aracı.
